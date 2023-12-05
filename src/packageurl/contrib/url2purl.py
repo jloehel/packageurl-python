@@ -45,6 +45,13 @@ in this single Python script.
 purl_router = Router()
 
 
+def custom_unquote_plus(url):
+    splitted = url.split("://")
+    if len(splitted) == 2 and "+" in splitted[0]:
+        return f"{splitted[0]}://{unquote_plus(splitted[1])}"
+    return unquote_plus(url)
+
+
 def url2purl(url):
     """
     Return a PackageURL inferred from the `url` string or None.
@@ -62,7 +69,7 @@ get_purl = url2purl
 
 
 def purl_from_pattern(type_, pattern, url, qualifiers=None):
-    url = unquote_plus(url)
+    url = custom_unquote_plus(url)
     compiled_pattern = re.compile(pattern, re.VERBOSE)
     match = compiled_pattern.match(url)
 
@@ -496,7 +503,7 @@ github_codeload_pattern = (
 register_pattern("github", github_codeload_pattern)
 
 
-@purl_router.route("https?://github\\.com/.*")
+@purl_router.route("(https?|git(\\+ssh|\\+https?)?|file|ssh)://(git@)?github\\.com/.*")
 def build_github_purl(url):
     """
     Return a PackageURL object from GitHub `url`.
@@ -539,7 +546,7 @@ def build_github_purl(url):
     )
 
     # https://github.com/pombredanne/schematics.git
-    git_pattern = r"https?://github.com/(?P<namespace>.+)/(?P<name>.+).(git)"
+    git_pattern = r"(https?|git(\+ssh|\+https?)?|file|ssh)://(git@)?github\.com/(?P<namespace>.+)/(?P<name>.+).(git)"
 
     patterns = (
         archive_pattern,
@@ -551,8 +558,8 @@ def build_github_purl(url):
         git_pattern,
     )
 
+    url = custom_unquote_plus(url)
     for pattern in patterns:
-        url = unquote_plus(url)
         matches = re.search(pattern, url)
         qualifiers = {}
         if matches:
