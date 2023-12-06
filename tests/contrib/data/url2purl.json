@@ -284,5 +284,11 @@
   "git+https://git@github.com/formatjs/formatjs.git": "pkg:github/formatjs/formatjs",
   "git://git@github.com/formatjs/formatjs.git": "pkg:github/formatjs/formatjs",
   "ssh://git@github.com/formatjs/formatjs.git": "pkg:github/formatjs/formatjs",
-  "file://git@github.com/formatjs/formatjs.git": "pkg:github/formatjs/formatjs"
+  "file://git@github.com/formatjs/formatjs.git": "pkg:github/formatjs/formatjs",
+  "http://svn.code.sf.net/p/sharpneat/code/branches/V3/": "pkg:sourceforge/sharpneat/code@3?scm=svn&version_prefix=V&versioning_style=branches",
+  "http://svn.code.sf.net/p/jackcess/code/jackcess/tags/jackcess-1.2.12/": "pkg:sourceforge/jackcess/code@1.2.12?scm=svn&subname=jackcess&version_prefix=jackcess-&versioning_style=tags",
+  "http://svn.code.sf.net/p/zeoslib/code-0/tags/6.6.0-beta": "pkg:sourceforge/zeoslib/code-0@6.6.0-beta?scm=svn&versioning_style=tags",
+  "http://svn.code.sf.net/p/codeblocks/code/tags/10.05/": "pkg:sourceforge/codeblocks/code@10.05?scm=svn&versioning_style=tags",
+  "http://svn.code.sf.net/p/codeblocks/code": "pkg:sourceforge/codeblocks/code?scm=svn",
+  "http://svn.code.sf.net/p/codeblocks/code/tags": "pkg:sourceforge/codeblocks/code?scm=svn&versioning_style=tags"
 }

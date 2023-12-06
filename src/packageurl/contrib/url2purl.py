@@ -409,6 +409,48 @@ sourceforge_download_pattern_bis = (
 register_pattern("sourceforge", sourceforge_download_pattern_bis)
 
 
+@purl_router.route("https?://svn.code.sf.net/p/.*")
+def build_svn_sourceforge_purl(uri):
+
+    sourceforge_svn_pattern = (
+        r"^https?://svn.code.sf.net/p/"
+        r"(?P<namespace>[\w\-\.]+)/"
+        r"(?P<name>[\w\.\-]+)"
+        r"(/(?P<subname>(?!(tags|branches))[\w\.\-]+))?"
+        r"(/(?P<versioning_style>tags|branches))?"
+        r"(/(?P<version_prefix>(?!\d)[a-zA-Z\-]+)?(?P<version>[\w\.\-]+))?"
+    )
+    compiled_pattern = re.compile(sourceforge_svn_pattern)
+    match = compiled_pattern.match(uri)
+    if not match:
+        return
+    purl_data = {
+        field: value for field, value in match.groupdict().items() if field in PackageURL._fields
+    }
+    qualifiers = {}
+
+    version_prefix = match.groupdict().get("version_prefix")
+    if version_prefix:
+        qualifiers.update({"version_prefix": version_prefix})
+
+    versioning_style = match.groupdict().get("versioning_style")
+    if versioning_style:
+        qualifiers.update({"versioning_style": versioning_style})
+
+    subname = match.groupdict().get("subname")
+    if subname:
+        qualifiers.update({"subname": subname})
+
+    qualifiers["scm"] = "svn"
+    if qualifiers:
+        if "qualifiers" in purl_data:
+            purl_data["qualifiers"].update(qualifiers)
+        else:
+            purl_data["qualifiers"] = qualifiers
+
+    return PackageURL("sourceforge", **purl_data)
+
+
 @purl_router.route("https?://.*sourceforge.net/project/.*")
 def build_sourceforge_purl(uri):
     # We use a more general route pattern instead of using `sourceforge_pattern`

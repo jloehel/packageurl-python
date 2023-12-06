@@ -314,6 +314,30 @@ def build_cocoapods_repo_url(purl):
     return name and f"https://cocoapods.org/pods/{name}"
 
 
+@repo_router.route("pkg:sourceforge/.*svn.*")
+def build_svn_repo_url(purl):
+    if isinstance(purl, str):
+        purl_data = PackageURL.from_string(purl)
+    elif isinstance(purl, PackageURL):
+        purl_data = purl
+    else:
+        raise ValueError("Not a purl")
+    base_url = "http://svn.code.sf.net/p"
+    svn_url = f"{base_url}/{purl_data.namespace}/{purl_data.name}"
+    if "subname" in purl_data.qualifiers:
+        svn_url = f"{svn_url}/{purl_data.qualifiers['subname']}"
+    if "versioning_style" in purl_data.qualifiers:
+        svn_url = f"{svn_url}/{purl_data.qualifiers['versioning_style']}"
+    if "version_prefix" in purl_data.qualifiers:
+        svn_url = f"{svn_url}/{purl_data.qualifiers['version_prefix']}"
+        if purl_data.version:
+            svn_url = f"{svn_url}{purl_data.version}"
+    else:
+        if purl_data.version:
+            svn_url = f"{svn_url}/{purl_data.version}"
+    return svn_url
+
+
 # Download URLs:
 
 
