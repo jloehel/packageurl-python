@@ -27,6 +27,7 @@
 from packageurl import PackageURL
 from packageurl.contrib.route import NoRouteAvailable
 from packageurl.contrib.route import Router
+from urllib.parse import quote
 
 
 def get_repo_download_url_by_package_type(
@@ -314,29 +315,45 @@ def build_cocoapods_repo_url(purl):
     return name and f"https://cocoapods.org/pods/{name}"
 
 
-@repo_router.route("pkg:sourceforge/.*svn.*")
+@repo_router.route("pkg:sourceforge/.*")
 def build_svn_repo_url(purl):
-    if isinstance(purl, str):
-        purl_data = PackageURL.from_string(purl)
-    elif isinstance(purl, PackageURL):
-        purl_data = purl
-    else:
-        raise ValueError("Not a purl")
-    base_url = "http://svn.code.sf.net/p"
-    svn_url = f"{base_url}/{purl_data.namespace}/{purl_data.name}"
-    if "subname" in purl_data.qualifiers:
-        svn_url = f"{svn_url}/{purl_data.qualifiers['subname']}"
-    if "versioning_style" in purl_data.qualifiers:
-        svn_url = f"{svn_url}/{purl_data.qualifiers['versioning_style']}"
-    if "version_prefix" in purl_data.qualifiers:
-        svn_url = f"{svn_url}/{purl_data.qualifiers['version_prefix']}"
-        if purl_data.version:
-            svn_url = f"{svn_url}{purl_data.version}"
-    else:
-        if purl_data.version:
-            svn_url = f"{svn_url}/{purl_data.version}"
-    return svn_url
+    purl_data = PackageURL.from_string(purl)
 
+    if "scm" in purl_data.qualifiers:
+        if "svn" == purl_data.qualifiers["scm"]:
+            scm = "svn"
+            base_url = "http://svn.code.sf.net/p"
+        elif "git" == purl_data.qualifiers["scm"]:
+            return None
+            scm = "git"
+            base_url = "http://git.code.sf.net/p"
+        else:
+            return None
+            scm = "hg"
+            base_url = "http://hg.code.sf.net/p"
+
+        scm_url = f"{base_url}/{purl_data.namespace}/{purl_data.name}"
+        if scm == "svn":
+            svn_url = scm_url
+            if "subname" in purl_data.qualifiers:
+                svn_url = f"{svn_url}/{purl_data.qualifiers['subname']}"
+            if "versioning_style" in purl_data.qualifiers:
+                svn_url = f"{svn_url}/{purl_data.qualifiers['versioning_style']}"
+            if "version_prefix" in purl_data.qualifiers:
+                svn_url = f"{svn_url}/{purl_data.qualifiers['version_prefix']}"
+                if purl_data.version:
+                    svn_url = f"{svn_url}{purl_data.version}"
+            else:
+                if purl_data.version:
+                    svn_url = f"{svn_url}/{purl_data.version}"
+            return svn_url
+    else:
+        project_url = None
+        if purl_data.name and not purl_data.namespace:
+            project_url = f"https://sourceforge.net/projects/{purl_data.name}"
+        elif purl_data.namespace:
+            project_url = f"https://sourceforge.net/projects/{purl_data.namespace}"
+        return project_url
 
 # Download URLs:
 
@@ -423,6 +440,27 @@ def build_repo_download_url(purl):
     Return a gitlab download URL from the `purl` string.
     """
     return get_repo_download_url(purl)
+
+
+@download_router.route("pkg:sourceforge/.*")
+def build_sourceforge_download_url(purl):
+    purl_data = PackageURL.from_string(purl)
+
+    namespace = purl_data.namespace
+    name = purl_data.name
+    qualifiers = purl_data.qualifiers
+
+    if "scm" in qualifiers:
+        if qualifiers["scm"] == "svn":
+            return f"svn.code.sf.net::p/{namespace}/{name}"
+        if qualifiers["scm"] == "hg":
+            return f"hg.code.sf.net::p/{namespace}/{name}"
+        if qualifiers["scm"] == "git":
+            return f"git.code.sf.net::p/{namespace}/{name}.git"
+
+    download_url = qualifiers.get("download_url")
+    if download_url:
+        return quote(download_url, safe="!#$&'()*+,/:;=?@[]~")
 
 
 def get_repo_download_url(purl):

@@ -26,7 +26,7 @@
 
 import os
 import re
-from urllib.parse import unquote_plus
+from urllib.parse import unquote_plus, unquote
 from urllib.parse import urlparse
 
 from packageurl import PackageURL
@@ -451,8 +451,41 @@ def build_svn_sourceforge_purl(uri):
     return PackageURL("sourceforge", **purl_data)
 
 
+@purl_router.route("https?://sourceforge.net/projects/.*")
+def build_new_sourceforge_purl(uri):
+    sourceforge_pattern = (
+        r"^https?://sourceforge.net/projects/"
+        r"(?P<namespace>[^/]+)"
+        r"/files"
+        r"(/(.+/)?)"
+        r"((?P<version_prefix>(?!\d)[a-zA-Z\-]+)?(?P<version>\d[\w\.\-\+\ ]+))"
+        r"(/(.+/)?)"
+        r"(?P<filename>(?P<name>.+)[-_\ ](?P=version_prefix)?(?P=version)(.*))"
+        r"/download$"
+    )
+
+    uri = unquote(uri)
+    sourceforge_purl = purl_from_pattern(
+        "sourceforge", sourceforge_pattern, uri,
+        qualifiers={"download_url": uri}
+    )
+
+    if not sourceforge_purl:
+        split_uri = uri.split("/projects/")
+
+        if len(split_uri) >= 2:
+            remaining_uri_path = split_uri[1]
+            remaining_uri_path_segments = remaining_uri_path.split("/")
+            if remaining_uri_path_segments:
+                project_name = remaining_uri_path_segments[0]
+                sourceforge_purl = PackageURL(
+                    type="sourceforge", name=project_name, qualifiers={"download_url": uri}
+                )
+    return sourceforge_purl
+
+
 @purl_router.route("https?://.*sourceforge.net/project/.*")
-def build_sourceforge_purl(uri):
+def build_old_sourceforge_purl(uri):
     # We use a more general route pattern instead of using `sourceforge_pattern`
     # below by itself because we want to capture all sourceforge download URLs,
     # even the ones that do not fit `sourceforge_pattern`. This helps prevent
@@ -470,7 +503,10 @@ def build_sourceforge_purl(uri):
         r"[^/]$"  # not ending with "/"
     )
 
-    sourceforge_purl = purl_from_pattern("sourceforge", sourceforge_pattern, uri)
+    sourceforge_purl = purl_from_pattern(
+        "sourceforge", sourceforge_pattern, uri,
+        qualifiers={"download_url": uri}
+    )
 
     if not sourceforge_purl:
         # Get the project name from `uri` and use that as the Package name
