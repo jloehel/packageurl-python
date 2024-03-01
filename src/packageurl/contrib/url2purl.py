@@ -380,35 +380,6 @@ nuget_api_pattern = (
 register_pattern("nuget", nuget_api_pattern)
 
 
-# https://sourceforge.net/projects/turbovnc/files/3.1/turbovnc-3.1.tar.gz/download
-# https://sourceforge.net/projects/scribus/files/scribus/1.6.0/scribus-1.6.0.tar.gz/download
-# https://sourceforge.net/projects/ventoy/files/v1.0.96/Ventoy%201.0.96%20release%20source%20code.tar.gz/download
-# https://sourceforge.net/projects/geoserver/files/GeoServer/2.23.4/geoserver-2.23.4-war.zip/download
-sourceforge_download_pattern = (
-    r"^https?://.*sourceforge.net/projects/"
-    r"(?P<name>.+)/"
-    r"files/"
-    r"(?i:(?P=name)/)?"  # optional case-insensitive name segment repeated
-    r"v?(?P<version>[0-9\.]+)/"  # version restricted to digits and dots
-    r"(?i:(?P=name)).*(?P=version).*"  # case-insensitive matching for {name}-{version}
-    r"(/download)$"  # ending with "/download"
-)
-
-register_pattern("sourceforge", sourceforge_download_pattern)
-
-
-# https://sourceforge.net/projects/spacesniffer/files/spacesniffer_1_3_0_2.zip/download
-sourceforge_download_pattern_bis = (
-    r"^https?://.*sourceforge.net/projects/"
-    r"(?P<name>.+)/"
-    r"files/"
-    r"(?i:(?P=name))_*(?P<version>[0-9_]+).*"
-    r"(/download)$"  # ending with "/download"
-)
-
-register_pattern("sourceforge", sourceforge_download_pattern_bis)
-
-
 @purl_router.route("https?://svn.code.sf.net/p/.*")
 def build_svn_sourceforge_purl(uri):
 
@@ -451,14 +422,49 @@ def build_svn_sourceforge_purl(uri):
     return PackageURL("sourceforge", **purl_data)
 
 
-@purl_router.route("https?://sourceforge.net/projects/.*")
-def build_new_sourceforge_purl(uri):
+@purl_router.route(r"https?://sourceforge.net/projects/.*/files/[^.]+\.(zip|tar\.gz|tar\.xz|tar\.bz2)/download")
+def build_new_sourceforge_purl_without_version(uri):
+    sourceforge_pattern = (
+        r"^https?://sourceforge.net/projects/"
+        r"(?P<namespace>[^/]+)"
+        r"/files/"
+        r"(?P<filename>"
+        r"([^.]+)"
+        r"\."
+        r"(?P<suffix>(zip|tar\.gz|tar\.xz|\.tar.bz2))"
+        r")"
+        r"/download$"
+    )
+    matcher = re.search(sourceforge_pattern, uri)
+    if not matcher:
+        return None
+    namespace = matcher.group("namespace")
+    suffix = matcher.group("suffix")
+    filename = matcher.group("filename").replace(f".{suffix}", "")
+    version_regex = r"((?P<version_prefix>(?!\d)[a-zA-Z\-]+)?(?P<version>\d[\w\_\.\-\+\ ]+))"
+    version_matcher = re.search(version_regex, filename)
+    if not version_matcher:
+        return None
+    version_prefix = version_matcher.group("version_prefix") or ""
+    version = version_matcher.group("version")
+    name = filename.replace(f"{version_prefix}{version}", "").rstrip("_-/").strip()
+    version = version.replace("_", ".")
+    qualifiers = {"download_url": uri}
+    if len(version_prefix) > 0:
+        qualifiers["version_prefix"] = version_prefix
+    return PackageURL(
+        type="sourceforge", namespace=namespace, name=name, version=version, qualifiers=qualifiers
+    )
+
+
+@purl_router.route(r"https?://sourceforge.net/projects/.*/files(/(.+/)?)((?!\d)[a-zA-Z\-]+)?\d[\w\.\_\-\+\ ]+/.*")
+def build_new_sourceforge_purl_with_version(uri):
     sourceforge_pattern = (
         r"^https?://sourceforge.net/projects/"
         r"(?P<namespace>[^/]+)"
         r"/files"
         r"(/(.+/)?)"
-        r"((?P<version_prefix>(?!\d)[a-zA-Z\-]+)?(?P<version>\d[\w\.\-\+\ ]+))"
+        r"((?P<version_prefix>(?!\d)[a-zA-Z\-]+)?(?P<version>\d[\w\_\.\-\+\ ]+))"
         r"(/(.+/)?)"
         r"(?P<filename>(?P<name>.+)[-_\ ](?P=version_prefix)?(?P=version)(.*))"
         r"/download$"
