@@ -29,6 +29,8 @@ import re
 from urllib.parse import unquote_plus, unquote
 from urllib.parse import urlparse
 
+import requests
+
 from packageurl import PackageURL
 from packageurl.contrib.route import NoRouteAvailable
 from packageurl.contrib.route import Router
@@ -539,6 +541,16 @@ cargo_pattern = r"^https?://crates.io/api/v1/crates/(?P<name>.+)/(?P<version>.+)
 register_pattern("cargo", cargo_pattern)
 
 
+def is_github_ref(owner, repo, ref):
+    api = "https://api.github.com"
+    for ref_type in ["tags", "heads"]:
+        url = f"{api}/repos/{owner}/{repo}/git/matching-refs/{ref_type}/{ref}"
+        response = requests.get(url)
+        if response.ok and len(response.json()) > 0:
+            return True
+    return False
+
+
 # https://raw.githubusercontent.com/volatilityfoundation/dwarf2json/master/LICENSE.txt
 github_raw_content_pattern = (
     r"https?://raw.githubusercontent.com/(?P<namespace>[^/]+)/(?P<name>[^/]+)/"
@@ -597,7 +609,8 @@ def build_github_purl(url):
     archive_pattern = (
         r"https?:\/\/github\.com\/(?P<namespace>.+)\/(?P<name>.+)"
         r"\/archive\/((refs\/tags\/))?"
-        r"(?P<version_prefix>v|V?)(?P<version>.*)\.(zip|tar\.gz|tar\.bz2|tgz)$"
+        r"((?P<version_prefix>(((?!\d)[a-zA-Z\/\_\d\-@]+[a-zA-Z\/\_\-@])|(v|V)))?(?P<version>\d[\w\_\.\-\+\ \/]+))"
+        r"\.(zip|tar\.gz|tar\.bz2|tgz)$"
     )
 
     # https://github.com/downloads/mozilla/rhino/rhino1_7R4.zip
@@ -626,7 +639,9 @@ def build_github_purl(url):
 
     releases_tag_pattern = (
         r"https?://github.com/(?P<namespace>.+)/(?P<name>.+)"
-        r"/releases/tag/(?P<version_prefix>v|V?)(?P<version>[\w\.\-\/@]+)(?<!\/)(\/*)$"
+        r"/releases/tag/"
+        r"((?P<version_prefix>(((?!\d)[a-zA-Z\/%\_\d\-@]+[a-zA-Z\/\d\_\-@])|(v|V)))?(?P<version>\d[\w\_\.\-\+\ \/]+))"
+        r"(?<!\/)(\/*)$"
     )
 
     # https://github.com/pombredanne/schematics.git
@@ -661,6 +676,7 @@ def build_github_purl(url):
     name = segments[1]
     version = None
     subpath = None
+    qualifiers = {}
 
     # https://github.com/TG1999/fetchcode/master
     if len(segments) >= 3 and segments[2] != "tree":
@@ -669,8 +685,29 @@ def build_github_purl(url):
 
     # https://github.com/TG1999/fetchcode/tree/master
     if len(segments) >= 4 and segments[2] == "tree":
-        version = segments[3]
-        subpath = "/".join(segments[4:])
+        ref = []
+        n_ref_segments = 0
+        for segment in segments[3:]:
+            test_ref = "/".join(ref + [segment])
+            if is_github_ref(namespace, name, test_ref):
+                ref.append(segment)
+                n_ref_segments += 1
+            else:
+                break
+        ref = "/".join(ref)
+        version_regex = (
+            r"("
+            r"(?P<version_prefix>(((?!\d)[a-zA-Z\/%\_\d\-@]+[a-zA-Z\/\d\_\-@])|(v|V)))?"
+            r"(?P<version>\d[\w\_\.\-\+\ \/]+)"
+            r")"
+        )
+        version_matcher = re.search(version_regex, ref)
+        if version_matcher:
+            version = version_matcher.group("version")
+            qualifiers["version_prefix"] = version_matcher.group("version_prefix")
+        else:
+            version = ref
+        subpath = "/".join(segments[3 + n_ref_segments:])
 
     return PackageURL(
         type="github",
@@ -678,6 +715,7 @@ def build_github_purl(url):
         name=name,
         version=version,
         subpath=subpath,
+        qualifiers=qualifiers
     )
 
 
