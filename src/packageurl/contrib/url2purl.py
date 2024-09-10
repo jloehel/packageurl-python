@@ -152,14 +152,16 @@ def build_npm_api_purl(uri):
     path = unquote_plus(urlparse(uri).path)
     segments = [seg for seg in path.split("/") if seg]
 
-    if len(segments) != 2:
+    if len(segments) < 2 or len(segments) > 3:
         return
 
     # /@invisionag/eslint-config-ivx
+    # or /@esbuild/freebsd-arm64/0.21.5
     if segments[0].startswith("@"):
         namespace = segments[0]
         name = segments[1]
-        return PackageURL("npm", namespace, name)
+        version = segments[2] if len(segments) == 3 else None
+        return PackageURL("npm", namespace, name, version)
 
     # /angular/1.6.6
     else:
