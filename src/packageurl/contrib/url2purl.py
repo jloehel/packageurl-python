@@ -26,6 +26,9 @@
 
 import os
 import re
+import pygit2
+import tempfile
+import warnings
 from urllib.parse import unquote_plus
 from urllib.parse import urlparse
 
@@ -40,6 +43,16 @@ This uses the a routing mechanism available in the route.py module.
 In order to make it easy to use, it contains all the conversion functions
 in this single Python script.
 """
+
+
+def init_remote(repo, name, url):
+    # Create the remote with a mirroring url
+    remote = repo.remotes.create(name, url, "+refs/*:refs/*")
+    # And set the configuration option to true for the push command
+    mirror_var = f"remote.{name.decode()}.mirror"
+    repo.config[mirror_var] = True
+    # Return the remote, which pygit2 will use to perform the clone
+    return remote
 
 
 purl_router = Router()
@@ -61,8 +74,55 @@ def url2purl(url):
 get_purl = url2purl
 
 
-def purl_from_pattern(type_, pattern, url, qualifiers=None):
-    url = unquote_plus(url)
+def get_version_subpath(purl_type, namespace, name, value, is_download):
+    if purl_type not in ["bitbucket", "github", "gitlab"]:
+        raise RuntimeError(f"`ref_path` is not supported: {purl_type}")
+    urls = {
+        "bitbucket": "https://bitbucket.org",
+        "gitlab": "https://gitlab.com",
+        "github": "https://github.com",
+    }
+    segments = get_path_segments(value)
+    if len(segments) == 1:
+        return segments[0], ""
+    url = urls[purl_type] + f"/{namespace}/{name}"
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        repo = pygit2.clone_repository(
+            url,
+            tmpdirname,
+            bare=True,
+            remote=init_remote
+        )
+        refs = []
+        subpath = []
+        for segment in segments:
+            test_ref = "/".join(subpath + [segment])
+            try:
+                repo.resolve_refish(test_ref)
+                refs.append(test_ref)
+                subpath = []
+            except KeyError:
+                subpath.append(segment)
+        if len(refs) == 0:
+            warnings.warn(
+                f"Could not find any existing reference in: {value} at {url}."
+                + f" Assuming that the first segment is the reference: {segments[0]}"
+            )
+            ref = segments[0]
+            subpath = "/".join(segments[1:])
+        elif len(refs) > 1:
+            ref = refs[-1]
+            subpath = "/".join(subpath)
+        else:
+            ref = refs[0]
+            subpath = "/".join(subpath)
+        if is_download:
+            return ref, ""
+        else:
+            return ref, subpath
+
+
+def purl_from_pattern(type_, pattern, url, qualifiers=None, is_download=False):
     compiled_pattern = re.compile(pattern, re.VERBOSE)
     match = compiled_pattern.match(url)
 
@@ -70,8 +130,21 @@ def purl_from_pattern(type_, pattern, url, qualifiers=None):
         return
 
     purl_data = {
-        field: value for field, value in match.groupdict().items() if field in PackageURL._fields
+        field: value
+        for field, value in match.groupdict().items()
+        if field in PackageURL._fields
     }
+
+    if "ref_path" in match.groupdict():
+        version, subpath = get_version_subpath(
+            type_,
+            purl_data["namespace"],
+            purl_data["name"],
+            match.groupdict()["ref_path"],
+            is_download,
+        )
+        purl_data["version"] = version
+        purl_data["subpath"] = subpath
 
     qualifiers = qualifiers or {}
     # Include the `version_prefix` as a qualifier to infer valid URLs in purl2url
@@ -449,19 +522,19 @@ register_pattern("cargo", cargo_pattern)
 
 # https://raw.githubusercontent.com/volatilityfoundation/dwarf2json/master/LICENSE.txt
 github_raw_content_pattern = (
-    r"https?://raw.githubusercontent.com/(?P<namespace>[^/]+)/(?P<name>[^/]+)/"
-    r"(?P<version>[^/]+)/(?P<subpath>.*)$"
+    r"https?:\/\/raw.githubusercontent.com\/(?P<namespace>[\w\-]+)\/(?P<name>[\w_\-\.]+)"
+    r"\/(?P<ref_path>.+)$"
 )
 
 register_pattern("github", github_raw_content_pattern)
 
 
-@purl_router.route("https?://api.github\\.com/repos/.*")
+@purl_router.route(r"https?:\/\/api.github\.com\/repos\/.*")
 def build_github_api_purl(url):
     """
     Return a PackageURL object from GitHub API `url`.
     For example:
-    https://api.github.com/repos/nexB/scancode-toolkit/commits/40593af0df6c8378d2b180324b97cb439fa11d66
+    https://api.github.com/repos/nexB/scancode-toolkit/commits/40593af0
     https://api.github.com/repos/nexB/scancode-toolkit/
     and returns a `PackageURL` object
     """
@@ -477,7 +550,7 @@ def build_github_api_purl(url):
     if len(segments) == 4 and segments[3] != "commits":
         version = segments[3]
 
-    # https://api.github.com/repos/nexB/scancode-toolkit/commits/40593af0df6c8378d2b180324b97cb439fa11d66
+    # https://api.github.com/repos/nexB/scancode-toolkit/commits/40593af0
     if len(segments) == 5 and segments[3] == "commits":
         version = segments[4]
 
@@ -487,108 +560,103 @@ def build_github_api_purl(url):
 # https://codeload.github.com/nexB/scancode-toolkit/tar.gz/v3.1.1
 # https://codeload.github.com/berngp/grails-rest/zip/release/0.7
 github_codeload_pattern = (
-    r"https?://codeload.github.com/(?P<namespace>.+)/(?P<name>.+)/"
-    r"(zip|tar.gz|tar.bz2|tgz)/(.*/)*"
-    r"(?P<version>.+)$"
+    r"https?:\/\/codeload.github.com\/(?P<namespace>[\w\-]+)\/(?P<name>[\w_\-\.]+)\/"
+    r"(legacy\.)?(zip|tar(\.(gz|bz2))|tgz)\/"
+    r"(?P<version>[\w\.\-\/@]+)$"
 )
 
 register_pattern("github", github_codeload_pattern)
 
 
-@purl_router.route("https?://github\\.com/.*")
+@purl_router.route(r"(https?|git(\+ssh|\+https?)?|file|ssh):\/\/(git@)?github\.com\/.*")
 def build_github_purl(url):
     """
     Return a PackageURL object from GitHub `url`.
     """
 
-    # https://github.com/apache/nifi/archive/refs/tags/rel/nifi-2.0.0-M3.tar.gz
-    archive_tags_pattern = (
-        r"https?://github.com/(?P<namespace>.+)/(?P<name>.+)"
-        r"/archive/refs/tags/"
-        r"(?P<version>.+).(zip|tar.gz|tar.bz2|.tgz)"
-    )
-
-    # https://github.com/nexB/scancode-toolkit/archive/v3.1.1.zip
+    # https://github.com/github/codeql/archive/refs/heads/main.tar.gz
+    # https://github.com/github/codeql/archive/refs/tags/codeql-cli/v2.12.0.zip
+    # https://github.com/github/codeql/archive/aef66c462abe817e33aad91d97aa782a1e2ad2c7.zip
     archive_pattern = (
-        r"https?://github.com/(?P<namespace>.+)/(?P<name>.+)"
-        r"/archive/(.*/)*"
-        r"((?P=name)(-|_|@))?"
-        r"(?P<version>.+).(zip|tar.gz|tar.bz2|.tgz)"
+        r"https?:\/\/github\.com\/(?P<namespace>[\w\-]+)\/(?P<name>[\w_\-\.]+)"
+        r"\/archive\/(((refs\/(tags|heads))|branches)\/)"
+        r"?(?P<version>[\w\.\-\/@]+)\.(zip|tar\.gz)$"
     )
 
+    # http://github.com/git/git/tarball/gitgui-0.7.4
+    # http://github.com/git/git/zipball/gitgui-0.6.3
+    old_releases_pattern = (
+        r"https?:\/\/github\.com\/(?P<namespace>[\w\-]+)\/(?P<name>[\w_\-\.]+)"
+        r"\/(tarball|zipball)\/"
+        r"?(?P<version>[\w\.\-\/@]+)$"
+    )
+
+    # Deprecated since 2013
     # https://github.com/downloads/mozilla/rhino/rhino1_7R4.zip
+    # https://github.com/downloads/libevent/libevent/libevent-2.0.21-stable.tar.gz
+    # https://github.com/downloads/mpruett/audiofile/audiofile-0.3.6.tar.gz
+    #
+    # Sometimes not clear if the prefix belongs to the tag or not.
+    # But the full URL gets added to the PURL as download_url
     download_pattern = (
-        r"https?://github.com/downloads/(?P<namespace>.+)/(?P<name>.+)/"
-        r"((?P=name)(-|@)?)?"
-        r"(?P<version>.+).(zip|tar.gz|tar.bz2|.tgz)"
+        r"https?:\/\/github.com\/downloads\/(?P<namespace>[\w\-]+)\/(?P<name>[\w_\-\.]+)"
+        r"\/((?P=name)(-|@)?)?"
+        r"(?P<version>.+).(zip|tar\.(gz|bz2)|.tgz)"
     )
 
     # https://github.com/pypa/get-virtualenv/raw/20.0.31/public/virtualenv.pyz
-    raw_pattern = (
-        r"https?://github.com/(?P<namespace>.+)/(?P<name>.+)"
-        r"/raw/(?P<version>[^/]+)/(?P<subpath>.*)$"
+    raw_blob_pattern = (
+        r"https?:\/\/github.com\/(?P<namespace>[\w\-]+)\/(?P<name>[\w_\-\.]+)"
+        r"\/(raw|blob)\/(?P<ref_path>.+)$"
     )
 
-    # https://github.com/fanf2/unifdef/blob/master/unifdef.c
-    blob_pattern = (
-        r"https?://github.com/(?P<namespace>.+)/(?P<name>.+)"
-        r"/blob/(?P<version>[^/]+)/(?P<subpath>.*)$"
+    releases_pattern = (
+        r"https?:\/\/github.com\/(?P<namespace>[\w\-]+)\/(?P<name>[\w_\-\.]+)"
+        r"\/releases\/(tag|download)\/(?P<ref_path>.+)$"
     )
 
-    releases_download_pattern = (
-        r"https?://github.com/(?P<namespace>.+)/(?P<name>.+)"
-        r"/releases/download/(?P<version>[^/]+)/.*$"
+    tree_pattern = (
+        r"https?:\/\/github.com\/(?P<namespace>[\w\-]+)\/(?P<name>[\w_\-\.]+)"
+        r"\/tree\/(?P<ref_path>.+)$"
     )
 
     # https://github.com/pombredanne/schematics.git
-    git_pattern = r"https?://github.com/(?P<namespace>.+)/(?P<name>.+).(git)"
+    git_pattern = (
+        r"(https?|git(\+ssh|\+https?)?|file|ssh):\/\/(git@)?github\.com"
+        r"\/(?P<namespace>[\w\-]+)\/(?P<name>[\w_\-\.]+)\.(git)"
+    )
+    default = r"https?:\/\/github.com\/(?P<namespace>[\w\-]+)\/(?P<name>[\w_\-\.]+).*"
 
     patterns = (
-        archive_tags_pattern,
         archive_pattern,
-        raw_pattern,
-        blob_pattern,
-        releases_download_pattern,
         download_pattern,
+        raw_blob_pattern,
+        old_releases_pattern,
+        releases_pattern,
+        tree_pattern,
         git_pattern,
+        default,
     )
 
     for pattern in patterns:
         matches = re.search(pattern, url)
         qualifiers = {}
+        is_download = False
         if matches:
-            if pattern == releases_download_pattern:
+            if pattern == download_pattern:
                 qualifiers["download_url"] = url
+                is_download = True
+            if pattern == releases_pattern and "download" in url:
+                qualifiers["download_url"] = url
+                is_download = True
             return purl_from_pattern(
-                type_="github", pattern=pattern, url=url, qualifiers=qualifiers
+                type_="github",
+                pattern=pattern,
+                url=url,
+                qualifiers=qualifiers,
+                is_download=is_download,
             )
-
-    segments = get_path_segments(url)
-    if not len(segments) >= 2:
-        return
-
-    namespace = segments[0]
-    name = segments[1]
-    version = None
-    subpath = None
-
-    # https://github.com/TG1999/fetchcode/master
-    if len(segments) >= 3 and segments[2] != "tree":
-        version = segments[2]
-        subpath = "/".join(segments[3:])
-
-    # https://github.com/TG1999/fetchcode/tree/master
-    if len(segments) >= 4 and segments[2] == "tree":
-        version = segments[3]
-        subpath = "/".join(segments[4:])
-
-    return PackageURL(
-        type="github",
-        namespace=namespace,
-        name=name,
-        version=version,
-        subpath=subpath,
-    )
+    return None
 
 
 @purl_router.route("https?://bitbucket\\.org/.*")
