@@ -652,7 +652,7 @@ def build_github_purl(url):
     archive_pattern = (
         r"https?:\/\/github\.com\/(?P<namespace>[\w\-]+)\/(?P<name>[\w_\-\.]+)"
         r"\/archive\/(((refs\/(tags|heads))|branches)\/)"
-        r"?(?P<version>[\w\.\-\/@]+)\.(zip|tar\.gz)$"
+        r"?(?P<version>[\w\.\-\+\/@]+)\.(zip|tar\.gz)$"
     )
 
     # http://github.com/git/git/tarball/gitgui-0.7.4
@@ -660,7 +660,7 @@ def build_github_purl(url):
     old_releases_pattern = (
         r"https?:\/\/github\.com\/(?P<namespace>[\w\-]+)\/(?P<name>[\w_\-\.]+)"
         r"\/(tarball|zipball)\/"
-        r"?(?P<version>[\w\.\-\/@]+)$"
+        r"?(?P<version>[\w\.\-\+\/@]+)$"
     )
 
     # Deprecated since 2013
