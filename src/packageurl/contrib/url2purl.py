@@ -29,7 +29,7 @@ import re
 import pygit2
 import tempfile
 import warnings
-from urllib.parse import unquote_plus
+from urllib.parse import unquote_plus, unquote
 from urllib.parse import urlparse
 
 from packageurl import PackageURL
@@ -147,10 +147,6 @@ def purl_from_pattern(type_, pattern, url, qualifiers=None, is_download=False):
         purl_data["subpath"] = subpath
 
     qualifiers = qualifiers or {}
-    # Include the `version_prefix` as a qualifier to infer valid URLs in purl2url
-    version_prefix = match.groupdict().get("version_prefix")
-    if version_prefix:
-        qualifiers.update({"version_prefix": version_prefix})
 
     if qualifiers:
         if "qualifiers" in purl_data:
@@ -445,37 +441,110 @@ nuget_api_pattern = (
 register_pattern("nuget", nuget_api_pattern)
 
 
-# https://sourceforge.net/projects/turbovnc/files/3.1/turbovnc-3.1.tar.gz/download
-# https://sourceforge.net/projects/scribus/files/scribus/1.6.0/scribus-1.6.0.tar.gz/download
-# https://sourceforge.net/projects/ventoy/files/v1.0.96/Ventoy%201.0.96%20release%20source%20code.tar.gz/download
-# https://sourceforge.net/projects/geoserver/files/GeoServer/2.23.4/geoserver-2.23.4-war.zip/download
-sourceforge_download_pattern = (
-    r"^https?://.*sourceforge.net/projects/"
-    r"(?P<name>.+)/"
-    r"files/"
-    r"(?i:(?P=name)/)?"  # optional case-insensitive name segment repeated
-    r"v?(?P<version>[0-9\.]+)/"  # version restricted to digits and dots
-    r"(?i:(?P=name)).*(?P=version).*"  # case-insensitive matching for {name}-{version}
-    r"(/download)$"  # ending with "/download"
-)
+@purl_router.route("https?://svn.code.sf.net/p/.*")
+def build_svn_sourceforge_purl(uri):
 
-register_pattern("sourceforge", sourceforge_download_pattern)
+    sourceforge_svn_pattern = (
+        r"^https?://svn.code.sf.net/p/"
+        r"(?P<namespace>[\w\-\.]+)/"
+        r"(?P<name>[\w\.\-]+)"
+        r"(/(?P<subname>(?!(tags|branches))[\w\.\-]+))?"
+        r"(/(?P<versioning_style>tags|branches))?"
+        r"(/(?P<version>[\w\.\-]+))?"
+    )
+    compiled_pattern = re.compile(sourceforge_svn_pattern)
+    match = compiled_pattern.match(uri)
+    if not match:
+        return
+    purl_data = {
+        field: value for field, value in match.groupdict().items() if field in PackageURL._fields
+    }
+    qualifiers = {}
+
+    versioning_style = match.groupdict().get("versioning_style")
+    if versioning_style:
+        qualifiers.update({"versioning_style": versioning_style})
+
+    subname = match.groupdict().get("subname")
+    if subname:
+        qualifiers.update({"subname": subname})
+
+    qualifiers["scm"] = "svn"
+    if qualifiers:
+        if "qualifiers" in purl_data:
+            purl_data["qualifiers"].update(qualifiers)
+        else:
+            purl_data["qualifiers"] = qualifiers
+
+    return PackageURL("sourceforge", **purl_data)
 
 
-# https://sourceforge.net/projects/spacesniffer/files/spacesniffer_1_3_0_2.zip/download
-sourceforge_download_pattern_bis = (
-    r"^https?://.*sourceforge.net/projects/"
-    r"(?P<name>.+)/"
-    r"files/"
-    r"(?i:(?P=name))_*(?P<version>[0-9_]+).*"
-    r"(/download)$"  # ending with "/download"
-)
+@purl_router.route(r"https?://sourceforge.net/projects/.*/files/[^.]+\.(zip|tar\.gz|tar\.xz|tar\.bz2)/download")
+def build_new_sourceforge_purl_without_version(uri):
+    sourceforge_pattern = (
+        r"^https?://sourceforge.net/projects/"
+        r"(?P<namespace>[^/]+)"
+        r"/files/"
+        r"(?P<filename>"
+        r"([^.]+)"
+        r"\."
+        r"(?P<suffix>(zip|tar\.gz|tar\.xz|\.tar.bz2))"
+        r")"
+        r"/download$"
+    )
+    matcher = re.search(sourceforge_pattern, uri)
+    if not matcher:
+        return None
+    namespace = matcher.group("namespace")
+    suffix = matcher.group("suffix")
+    filename = matcher.group("filename").replace(f".{suffix}", "")
+    version_regex = r"(?P<version>\d[\w\_\.\-\+\ ]+)"
+    version_matcher = re.search(version_regex, filename)
+    if not version_matcher:
+        return None
+    version = version_matcher.group("version")
+    name = filename.replace(f"{version}", "").rstrip("_-/").strip()
+    version = version.replace("_", ".")
+    qualifiers = {"download_url": uri}
+    return PackageURL(
+        type="sourceforge", namespace=namespace, name=name, version=version, qualifiers=qualifiers
+    )
 
-register_pattern("sourceforge", sourceforge_download_pattern_bis)
+
+@purl_router.route(r"https?://sourceforge.net/projects/.*/files(/(.+/)?)((?!\d)[a-zA-Z\-]+)?\d[\w\.%\_\-\+\ ]+/.*")
+def build_new_sourceforge_purl_with_version(uri):
+    sourceforge_pattern = (
+        r"^https?://sourceforge.net/projects/"
+        r"(?P<namespace>[^/]+)"
+        r"/files"
+        r"(/(.+/)?)"
+        r"((?P<version_prefix>(?!\d)[a-zA-Z\-]+)?(?P<version>\d[\w\_\.\-\+\ ]+))"
+        r"(/(.+/)?)"
+        r"(?P<filename>(?P<name>.+)[-_\ ](?P=version_prefix)?(?P=version)(.*))"
+        r"/download$"
+    )
+    uri = unquote(uri)
+    sourceforge_purl = purl_from_pattern(
+        "sourceforge", sourceforge_pattern, uri,
+        qualifiers={"download_url": uri}
+    )
+
+    if not sourceforge_purl:
+        split_uri = uri.split("/projects/")
+
+        if len(split_uri) >= 2:
+            remaining_uri_path = split_uri[1]
+            remaining_uri_path_segments = remaining_uri_path.split("/")
+            if remaining_uri_path_segments:
+                project_name = remaining_uri_path_segments[0]
+                sourceforge_purl = PackageURL(
+                    type="sourceforge", name=project_name, qualifiers={"download_url": uri}
+                )
+    return sourceforge_purl
 
 
 @purl_router.route("https?://.*sourceforge.net/project/.*")
-def build_sourceforge_purl(uri):
+def build_old_sourceforge_purl(uri):
     # We use a more general route pattern instead of using `sourceforge_pattern`
     # below by itself because we want to capture all sourceforge download URLs,
     # even the ones that do not fit `sourceforge_pattern`. This helps prevent
@@ -493,7 +562,10 @@ def build_sourceforge_purl(uri):
         r"[^/]$"  # not ending with "/"
     )
 
-    sourceforge_purl = purl_from_pattern("sourceforge", sourceforge_pattern, uri)
+    sourceforge_purl = purl_from_pattern(
+        "sourceforge", sourceforge_pattern, uri,
+        qualifiers={"download_url": uri}
+    )
 
     if not sourceforge_purl:
         # Get the project name from `uri` and use that as the Package name
