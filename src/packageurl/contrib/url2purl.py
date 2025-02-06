@@ -26,12 +26,14 @@
 
 import os
 import re
-import pygit2
 import tempfile
 import warnings
 from pathlib import Path
-from urllib.parse import unquote_plus, unquote
+from urllib.parse import unquote
+from urllib.parse import unquote_plus
 from urllib.parse import urlparse
+
+import pygit2
 
 from packageurl import PackageURL
 from packageurl.contrib.route import NoRouteAvailable
@@ -89,10 +91,7 @@ def get_version_subpath(purl_type, namespace, name, value, is_download):
     url = urls[purl_type] + f"/{namespace}/{name}"
     with tempfile.TemporaryDirectory() as tmpdirname:
         repo = pygit2.clone_repository(
-            url,
-            Path(tmpdirname).resolve(),
-            bare=True,
-            remote=init_remote
+            url, Path(tmpdirname).resolve(), bare=True, remote=init_remote
         )
         refs = []
         subpath = []
@@ -131,9 +130,7 @@ def purl_from_pattern(type_, pattern, url, qualifiers=None, is_download=False):
         return
 
     purl_data = {
-        field: value
-        for field, value in match.groupdict().items()
-        if field in PackageURL._fields
+        field: value for field, value in match.groupdict().items() if field in PackageURL._fields
     }
 
     if "ref_path" in match.groupdict():
@@ -480,7 +477,9 @@ def build_svn_sourceforge_purl(uri):
     return PackageURL("sourceforge", **purl_data)
 
 
-@purl_router.route(r"https?://sourceforge.net/projects/.*/files/[^.]+\.(zip|tar\.gz|tar\.xz|tar\.bz2)/download")
+@purl_router.route(
+    r"https?://sourceforge.net/projects/.*/files/[^.]+\.(zip|tar\.gz|tar\.xz|tar\.bz2)/download"
+)
 def build_new_sourceforge_purl_without_version(uri):
     sourceforge_pattern = (
         r"^https?://sourceforge.net/projects/"
@@ -512,7 +511,9 @@ def build_new_sourceforge_purl_without_version(uri):
     )
 
 
-@purl_router.route(r"https?://sourceforge.net/projects/.*/files(/(.+/)?)((?!\d)[a-zA-Z\-]+)?\d[\w\.%\_\-\+\ ]+/.*")
+@purl_router.route(
+    r"https?://sourceforge.net/projects/.*/files(/(.+/)?)((?!\d)[a-zA-Z\-]+)?\d[\w\.%\_\-\+\ ]+/.*"
+)
 def build_new_sourceforge_purl_with_version(uri):
     sourceforge_pattern = (
         r"^https?://sourceforge.net/projects/"
@@ -526,8 +527,7 @@ def build_new_sourceforge_purl_with_version(uri):
     )
     uri = unquote(uri)
     sourceforge_purl = purl_from_pattern(
-        "sourceforge", sourceforge_pattern, uri,
-        qualifiers={"download_url": uri}
+        "sourceforge", sourceforge_pattern, uri, qualifiers={"download_url": uri}
     )
 
     if not sourceforge_purl:
@@ -564,8 +564,7 @@ def build_old_sourceforge_purl(uri):
     )
 
     sourceforge_purl = purl_from_pattern(
-        "sourceforge", sourceforge_pattern, uri,
-        qualifiers={"download_url": uri}
+        "sourceforge", sourceforge_pattern, uri, qualifiers={"download_url": uri}
     )
 
     if not sourceforge_purl:
