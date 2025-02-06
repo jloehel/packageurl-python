@@ -89,7 +89,7 @@ def get_version_subpath(purl_type, namespace, name, value, is_download):
     if len(segments) == 1:
         return segments[0], ""
     url = urls[purl_type] + f"/{namespace}/{name}"
-    with tempfile.TemporaryDirectory() as tmpdirname:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdirname:
         repo = pygit2.clone_repository(
             url, Path(tmpdirname).resolve(), bare=True, remote=init_remote
         )
@@ -116,6 +116,7 @@ def get_version_subpath(purl_type, namespace, name, value, is_download):
         else:
             ref = refs[0]
             subpath = "/".join(subpath)
+        del repo
         if is_download:
             return ref, ""
         else:
