@@ -29,6 +29,7 @@ import re
 import pygit2
 import tempfile
 import warnings
+from pathlib import Path
 from urllib.parse import unquote_plus, unquote
 from urllib.parse import urlparse
 
@@ -89,7 +90,7 @@ def get_version_subpath(purl_type, namespace, name, value, is_download):
     with tempfile.TemporaryDirectory() as tmpdirname:
         repo = pygit2.clone_repository(
             url,
-            tmpdirname,
+            Path(tmpdirname).resolve(),
             bare=True,
             remote=init_remote
         )
