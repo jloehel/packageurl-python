@@ -478,6 +478,44 @@ def build_svn_sourceforge_purl(uri):
     return PackageURL("sourceforge", **purl_data)
 
 
+@purl_router.route("(https?|git)://git.code.sf.net/p/.*")
+def build_git_sourceforge_purl(uri):
+
+    sourceforge_git_pattern = (
+        r"^(https?|git)://git.code.sf.net/p/"
+        r"(?P<namespace>[\w\-\.]+)/"
+        r"(?P<name>[\w\.\-]+)"
+        r"(/(?P<subname>(?!(tags|branches))[\w\.\-]+))?"
+        r"(/(?P<versioning_style>tags|branches))?"
+        r"(/(?P<version>[\w\.\-]+))?"
+    )
+    compiled_pattern = re.compile(sourceforge_git_pattern)
+    match = compiled_pattern.match(uri)
+    if not match:
+        return
+    purl_data = {
+        field: value for field, value in match.groupdict().items() if field in PackageURL._fields
+    }
+    qualifiers = {}
+
+    versioning_style = match.groupdict().get("versioning_style")
+    if versioning_style:
+        qualifiers.update({"versioning_style": versioning_style})
+
+    subname = match.groupdict().get("subname")
+    if subname:
+        qualifiers.update({"subname": subname})
+
+    qualifiers["scm"] = "git"
+    if qualifiers:
+        if "qualifiers" in purl_data:
+            purl_data["qualifiers"].update(qualifiers)
+        else:
+            purl_data["qualifiers"] = qualifiers
+
+    return PackageURL("sourceforge", **purl_data)
+
+
 @purl_router.route(
     r"https?://sourceforge.net/projects/.*/files/[^.]+\.(zip|tar\.gz|tar\.xz|tar\.bz2)/download"
 )

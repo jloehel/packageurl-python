@@ -186,6 +186,8 @@
   "http://svn.code.sf.net/p/codeblocks/code/tags/10.05/": "pkg:sourceforge/codeblocks/code@10.05?scm=svn&versioning_style=tags",
   "http://svn.code.sf.net/p/codeblocks/code": "pkg:sourceforge/codeblocks/code?scm=svn",
   "http://svn.code.sf.net/p/codeblocks/code/tags": "pkg:sourceforge/codeblocks/code?scm=svn&versioning_style=tags",
+  "git://git.code.sf.net/p/net-tools/code": "pkg:sourceforge/net-tools/code?scm=git",
+  "https://git.code.sf.net/p/net-tools/code": "pkg:sourceforge/net-tools/code?scm=git",
   "https://sourceforge.net/projects/zedgraph/files/zedgraph%20source/5.0.9%20%2B%204.5.9/zedgraph_source_v509_459.zip/download": "pkg:sourceforge/zedgraph?download_url=https://sourceforge.net/projects/zedgraph/files/zedgraph%20source/5.0.9%20%2B%204.5.9/zedgraph_source_v509_459.zip/download",
   "https://sourceforge.net/projects/codeblocks/files/Sources/20.03/codeblocks-20.03.tar.xz/download": "pkg:sourceforge/codeblocks/codeblocks@20.03?download_url=https://sourceforge.net/projects/codeblocks/files/Sources/20.03/codeblocks-20.03.tar.xz/download",
   "https://sourceforge.net/projects/scrcpy.mirror/files/v2.3.1/scrcpy-win64-v2.3.1.zip/download": "pkg:sourceforge/scrcpy.mirror/scrcpy-win64@2.3.1?download_url=https://sourceforge.net/projects/scrcpy.mirror/files/v2.3.1/scrcpy-win64-v2.3.1.zip/download",

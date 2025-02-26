@@ -323,11 +323,9 @@ def build_sourceforge_repo_url(purl):
             scm = "svn"
             base_url = "http://svn.code.sf.net/p"
         elif "git" == purl_data.qualifiers["scm"]:
-            return None
             scm = "git"
             base_url = "http://git.code.sf.net/p"
         else:
-            return None
             scm = "hg"
             base_url = "http://hg.code.sf.net/p"
         scm_url = f"{base_url}/{purl_data.namespace}/{purl_data.name}"
@@ -337,14 +335,12 @@ def build_sourceforge_repo_url(purl):
                 svn_url = f"{svn_url}/{purl_data.qualifiers['subname']}"
             if "versioning_style" in purl_data.qualifiers:
                 svn_url = f"{svn_url}/{purl_data.qualifiers['versioning_style']}"
-            if "version_prefix" in purl_data.qualifiers:
-                svn_url = f"{svn_url}/{purl_data.qualifiers['version_prefix']}"
-                if purl_data.version:
-                    svn_url = f"{svn_url}{purl_data.version}"
             else:
                 if purl_data.version:
                     svn_url = f"{svn_url}/{purl_data.version}"
             return svn_url
+        else:
+            return scm_url
     else:
         project_url = None
         if purl_data.name and not purl_data.namespace:
