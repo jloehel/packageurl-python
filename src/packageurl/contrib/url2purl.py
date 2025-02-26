@@ -732,9 +732,13 @@ def build_github_purl(url):
     )
 
     # https://github.com/pombredanne/schematics.git
-    git_pattern = (
+    git_pattern1 = (
         r"(https?|git(\+ssh|\+https?)?|file|ssh):\/\/(git@)?github\.com"
         r"\/(?P<namespace>[\w\-]+)\/(?P<name>[\w_\-\.]+)\.(git)"
+    )
+    git_pattern2 = (
+        r"(https?|git(\+ssh|\+https?)?|file|ssh):\/\/(git@)?github\.com"
+        r"\/(?P<namespace>[\w\-]+)\/(?P<name>[\w_\-\.]+)"
     )
     default = r"https?:\/\/github.com\/(?P<namespace>[\w\-]+)\/(?P<name>[\w_\-\.]+).*"
 
@@ -745,7 +749,8 @@ def build_github_purl(url):
         old_releases_pattern,
         releases_pattern,
         tree_pattern,
-        git_pattern,
+        git_pattern1,
+        git_pattern2,
         default,
     )
 
