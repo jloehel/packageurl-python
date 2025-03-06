@@ -32,6 +32,7 @@ from pathlib import Path
 from urllib.parse import unquote
 from urllib.parse import unquote_plus
 from urllib.parse import urlparse
+from urllib.parse import ParseResult
 
 import pygit2
 
@@ -61,12 +62,27 @@ def init_remote(repo, name, url):
 purl_router = Router()
 
 
+# TODO: Do better!
+def normalize_url(url):
+    parsed = urlparse(url)
+    new_path = re.sub("/{2,}", "/", parsed.path)
+    return ParseResult(
+        parsed.scheme,
+        parsed.netloc,
+        new_path,
+        parsed.params,
+        parsed.query,
+        parsed.fragment,
+    ).geturl()
+
+
 def url2purl(url):
     """
     Return a PackageURL inferred from the `url` string or None.
     """
     if url:
         try:
+            url = normalize_url(url)
             return purl_router.process(url)
         except NoRouteAvailable:
             # If `url` does not fit in one of the existing routes,

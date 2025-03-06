@@ -263,6 +263,7 @@
   "git+ssh://github.com/formatjs/formatjs.git": "pkg:github/formatjs/formatjs",
   "git+https://git@github.com/formatjs/formatjs.git": "pkg:github/formatjs/formatjs",
   "git://github.com/sbabic/libubootenv": "pkg:github/sbabic/libubootenv",
+  "https://github.com/avahi/avahi/releases//download/v0.8/avahi-0.8.tar.gz": "pkg:github/avahi/avahi@v0.8?download_url=https://github.com/avahi/avahi/releases/download/v0.8/avahi-0.8.tar.gz",
   "git://git@github.com/formatjs/formatjs.git": "pkg:github/formatjs/formatjs",
   "ssh://git@github.com/formatjs/formatjs.git": "pkg:github/formatjs/formatjs",
   "file://git@github.com/formatjs/formatjs.git": "pkg:github/formatjs/formatjs",
